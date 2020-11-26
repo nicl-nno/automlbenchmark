@@ -22,16 +22,16 @@ elif [[ -d "$APP_ROOT/venv" ]]; then
 fi
 
 if [[ -n "$PY_VENV" ]]; then
-    py_exec="$PY_VENV/bin/python"
+    py_exec="$PY_VENV/bin/python3.7"
     if [[ ! -x py_exec ]]; then
-        python3 -m venv "$PY_VENV"
+        python3.7 -m venv "$PY_VENV"
         $py_exec -m pip install -U pip wheel
     fi
-    py_exec="$py_exec -W ignore"
+    py_exec="$py_exec -m http.server 8000 -W ignore"
     pip_exec="$PY_VENV/bin/pip"
 else
     pip_exec=pip3
-    py_exec=python3
+    py_exec=python3.7
 fi
 
 PY() {

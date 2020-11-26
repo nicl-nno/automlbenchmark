@@ -109,7 +109,7 @@ TPOT:
   project: https://github.com/EpistasisLab/tpot
 
 FEDOT:
-  version: '0.10.1'
+  version: '0.1.0'
   project: https://github.com/nccr-itmo/FEDOT
 #  params:
 #    _save_artifacts: ['models']
