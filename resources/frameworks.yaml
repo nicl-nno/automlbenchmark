@@ -107,6 +107,10 @@ ranger:
 TPOT:
   version: '0.11.5'
   project: https://github.com/EpistasisLab/tpot
+
+FEDOT:
+  version: '0.10.1'
+  project: https://github.com/nccr-itmo/FEDOT
 #  params:
 #    _save_artifacts: ['models']
 #    max_eval_time_mins: 2
