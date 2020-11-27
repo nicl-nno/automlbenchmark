@@ -11,14 +11,16 @@ os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
 
-from fedot.core.composer.gp_composer.gp_composer import GPComposerRequirements, GPComposerBuilder
-from fedot.core.composer.optimisers.gp_optimiser import GPChainOptimiserParameters, GeneticSchemeTypesEnum
+from fedot.core.composer.gp_composer.gp_composer import GPComposer, GPComposerRequirements
 from fedot.core.repository.model_types_repository import ModelTypesRepository
-from fedot.core.repository.quality_metrics_repository import ClassificationMetricsEnum, MetricsRepository
+from fedot.core.repository.quality_metrics_repository import ClassificationMetricsEnum, RegressionMetricsEnum, \
+    MetricsRepository
 from fedot.core.repository.tasks import Task, TaskTypesEnum
 from fedot.core.repository.dataset_types import DataTypesEnum
-
+from fedot.core.models.data import InputData
 from frameworks.shared.callee import call_run, result, output_subdir, utils
+
+import datetime
 
 log = logging.getLogger(__name__)
 
@@ -47,20 +49,21 @@ def run(dataset, config):
         metric = ClassificationMetricsEnum.ROCAUC
         task_type = TaskTypesEnum.classification
     else:
-        raise NotImplementedError()
+        metric = RegressionMetricsEnum.RMSE
+        task_type = TaskTypesEnum.regression
 
     task = Task(task_type)
 
-    X_train = dataset.train.X_enc
+    x_train = dataset.train.X_enc
     y_train = dataset.train.y_enc
 
     training_params = {k: v for k, v in config.framework_params.items() if not k.startswith('_')}
 
     dataset_to_compose = \
         InputData(idx=[_ for _ in range(len(y_train))],
-                  features=X_train,
+                  features=x_train,
                   target=y_train,
-                  task=task_type,
+                  task=task,
                   data_type=DataTypesEnum.table)
 
     n_jobs = config.framework_params.get('_n_jobs',
@@ -72,33 +75,29 @@ def run(dataset, config):
 
     available_model_types, _ = ModelTypesRepository().suitable_model(task_type=task.task_type)
 
+    metric_function = MetricsRepository().metric_by_id(metric)
+
     composer_requirements = GPComposerRequirements(
         primary=available_model_types,
         secondary=available_model_types, max_arity=3,
         max_depth=3, pop_size=20, num_of_generations=20,
-        crossover_prob=0.8, mutation_prob=0.8, max_lead_time=runtime_min)
+        crossover_prob=0.8, mutation_prob=0.8, max_lead_time=datetime.timedelta(minutes=runtime_min))
 
-    # GP optimiser parameters choice
-    scheme_type = GeneticSchemeTypesEnum.steady_state
-    optimiser_parameters = GPChainOptimiserParameters(genetic_scheme_type=scheme_type)
-
-    metric_function = MetricsRepository().metric_by_id(metric)
-
-    builder = GPComposerBuilder(task=task).with_requirements(composer_requirements).with_metrics(
-        metric_function).with_optimiser_parameters(optimiser_parameters)
-
-    composer = builder.build()
+    # Create GP-based composer
+    composer = GPComposer()
 
     with utils.Timer() as training:
         chain_evo_composed = composer.compose_chain(data=dataset_to_compose,
-                                                    is_visualise=True)
+                                                    initial_chain=None,
+                                                    composer_requirements=composer_requirements,
+                                                    metrics=metric_function, is_visualise=False)
 
         chain_evo_composed.fit(input_data=dataset_to_compose, verbose=False)
 
     log.info('Predicting on the test set.')
     X_test = dataset.test.X_enc
     y_test = dataset.test.y_enc
-    predictions = chain_evo_composed.predict(X_test)
+    #predictions = chain_evo_composed.predict(X_test)
     probabilities = chain_evo_composed.predict(X_test) if is_classification else None
     predictions = [_ for _ in probabilities]
 
