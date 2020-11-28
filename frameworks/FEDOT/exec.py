@@ -3,6 +3,7 @@ import os
 import pprint
 import sys
 import tempfile as tmp
+from copy import copy
 
 if sys.platform == 'darwin':
     os.environ['OBJC_DISABLE_INITIALIZE_FORK_SAFETY'] = 'YES'
@@ -19,7 +20,7 @@ from fedot.core.repository.tasks import Task, TaskTypesEnum
 from fedot.core.repository.dataset_types import DataTypesEnum
 from fedot.core.models.data import InputData
 from frameworks.shared.callee import call_run, result, output_subdir, utils
-
+import numpy as np
 import datetime
 
 log = logging.getLogger(__name__)
@@ -57,12 +58,21 @@ def run(dataset, config):
     x_train = dataset.train.X_enc
     y_train = dataset.train.y_enc
 
+    x_test = dataset.test.X_enc
+
     training_params = {k: v for k, v in config.framework_params.items() if not k.startswith('_')}
 
     dataset_to_compose = \
         InputData(idx=[_ for _ in range(len(y_train))],
                   features=x_train,
                   target=y_train,
+                  task=task,
+                  data_type=DataTypesEnum.table)
+
+    dataset_to_test = \
+        InputData(idx=[_ for _ in range(len(y_train))],
+                  features=x_test,
+                  target=None,
                   task=task,
                   data_type=DataTypesEnum.table)
 
@@ -80,7 +90,7 @@ def run(dataset, config):
     composer_requirements = GPComposerRequirements(
         primary=available_model_types,
         secondary=available_model_types, max_arity=3,
-        max_depth=3, pop_size=20, num_of_generations=20,
+        max_depth=2, pop_size=3, num_of_generations=2,
         crossover_prob=0.8, mutation_prob=0.8, max_lead_time=datetime.timedelta(minutes=runtime_min))
 
     # Create GP-based composer
@@ -95,11 +105,32 @@ def run(dataset, config):
         chain_evo_composed.fit(input_data=dataset_to_compose, verbose=False)
 
     log.info('Predicting on the test set.')
-    X_test = dataset.test.X_enc
     y_test = dataset.test.y_enc
-    #predictions = chain_evo_composed.predict(X_test)
-    probabilities = chain_evo_composed.predict(X_test) if is_classification else None
-    predictions = [_ for _ in probabilities]
+    # predictions = chain_evo_composed.predict(X_test)
+    probabilities = chain_evo_composed.predict(dataset_to_test).predict
+    predictions = copy(probabilities)
+
+    if not is_classification:
+        probabilities = None
+
+    if is_classification:
+        # if len(predictions.shape)==1
+        predictions = list(predictions)
+
+        if len(probabilities.shape) == 1:
+            new_column = [1 - _ for _ in list(probabilities)]
+            probabilities = np.expand_dims(probabilities, axis=1)
+            new_column = np.expand_dims(new_column, axis=1)
+
+            probabilities = np.append(probabilities, new_column, axis=1)
+
+            predictions = [0 if _ > np.mean(predictions) else 1for _ in predictions]
+        else:
+            predictions = [np.argmax(_) for _ in predictions]
+
+            #print(probabilities.shape)
+
+            #print(predictions.shape)
 
     # save_artifacts(fedot, config)
 
