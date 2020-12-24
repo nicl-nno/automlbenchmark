@@ -16,9 +16,11 @@ from fedot.core.composer.gp_composer.gp_composer import GPComposer, GPComposerRe
 from fedot.core.repository.model_types_repository import ModelTypesRepository
 from fedot.core.repository.quality_metrics_repository import ClassificationMetricsEnum, RegressionMetricsEnum, \
     MetricsRepository
+from fedot.core.composer.gp_composer.gp_composer import GPComposerBuilder, GPComposerRequirements
+from fedot.core.composer.optimisers.gp_optimiser import GPChainOptimiserParameters, GeneticSchemeTypesEnum
 from fedot.core.repository.tasks import Task, TaskTypesEnum
 from fedot.core.repository.dataset_types import DataTypesEnum
-from fedot.core.models.data import InputData
+from fedot.core.data.data import InputData
 from frameworks.shared.callee import call_run, result, output_subdir, utils
 import numpy as np
 import datetime
@@ -87,50 +89,60 @@ def run(dataset, config):
 
     metric_function = MetricsRepository().metric_by_id(metric)
 
-    composer_requirements = GPComposerRequirements(
-        primary=available_model_types,
-        secondary=available_model_types, max_arity=3,
-        max_depth=2, pop_size=3, num_of_generations=2,
-        crossover_prob=0.8, mutation_prob=0.8, max_lead_time=datetime.timedelta(minutes=runtime_min))
-
     # Create GP-based composer
     composer = GPComposer()
 
     with utils.Timer() as training:
+        # the choice and initialisation of the GP search
+        composer_requirements = GPComposerRequirements(
+            primary=available_model_types,
+            secondary=available_model_types, max_arity=3,
+            max_depth=3, pop_size=3, num_of_generations=2,
+            crossover_prob=0.8, mutation_prob=0.8, max_lead_time=datetime.timedelta(minutes=runtime_min))
+
+        # GP optimiser parameters choice
+        scheme_type = GeneticSchemeTypesEnum.steady_state
+        optimiser_parameters = GPChainOptimiserParameters(genetic_scheme_type=scheme_type)
+
+        # Create builder for composer and set composer params
+        builder = GPComposerBuilder(task=task).with_requirements(composer_requirements).with_metrics(
+            metric_function).with_optimiser_parameters(optimiser_parameters)
+
+        composer = builder.build()
+
+        # the optimal chain generation by composition - the most time-consuming task
         chain_evo_composed = composer.compose_chain(data=dataset_to_compose,
-                                                    initial_chain=None,
-                                                    composer_requirements=composer_requirements,
-                                                    metrics=metric_function, is_visualise=False)
+                                                    is_visualise=False)
 
         chain_evo_composed.fit(input_data=dataset_to_compose, verbose=False)
 
     log.info('Predicting on the test set.')
     y_test = dataset.test.y_enc
-    # predictions = chain_evo_composed.predict(X_test)
-    probabilities = chain_evo_composed.predict(dataset_to_test).predict
-    predictions = copy(probabilities)
+    predictions = chain_evo_composed.predict(dataset_to_test, output_mode='labels').predict
 
     if not is_classification:
         probabilities = None
+    else:
+        probabilities = chain_evo_composed.predict(dataset_to_test, output_mode='full_probs').predict
 
-    if is_classification:
+   # if is_classification:
         # if len(predictions.shape)==1
-        predictions = list(predictions)
+        #predictions = list(predictions)
 
-        if len(probabilities.shape) == 1:
-            new_column = [1 - _ for _ in list(probabilities)]
-            probabilities = np.expand_dims(probabilities, axis=1)
-            new_column = np.expand_dims(new_column, axis=1)
+        #if len(probabilities.shape) == 1:
+        #    new_column = [1 - _ for _ in list(probabilities)]
+        #    probabilities = np.expand_dims(probabilities, axis=1)
+        #    new_column = np.expand_dims(new_column, axis=1)#
+        #
+        #    probabilities = np.append(probabilities, new_column, axis=1)
+        #
+        #    predictions = [0 if _ > np.mean(predictions) else 1 for _ in predictions]
+        #else:
+        #    predictions = [np.argmax(_) for _ in predictions]
 
-            probabilities = np.append(probabilities, new_column, axis=1)
+            # print(probabilities.shape)
 
-            predictions = [0 if _ > np.mean(predictions) else 1for _ in predictions]
-        else:
-            predictions = [np.argmax(_) for _ in predictions]
-
-            #print(probabilities.shape)
-
-            #print(predictions.shape)
+            # print(predictions.shape)
 
     # save_artifacts(fedot, config)
 
