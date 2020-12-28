@@ -6,13 +6,15 @@ import tempfile as tmp
 from copy import copy
 from sklearn.utils import shuffle
 from numpy import squeeze
+
 if sys.platform == 'darwin':
     os.environ['OBJC_DISABLE_INITIALIZE_FORK_SAFETY'] = 'YES'
 os.environ['JOBLIB_TEMP_FOLDER'] = tmp.gettempdir()
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
-
+from fedot.core.chains.node import PrimaryNode
+from fedot.core.chains.chain import Chain
 from fedot.core.composer.gp_composer.gp_composer import GPComposer, GPComposerRequirements
 from fedot.core.repository.model_types_repository import ModelTypesRepository
 from fedot.core.repository.quality_metrics_repository import ClassificationMetricsEnum, RegressionMetricsEnum, \
@@ -64,9 +66,10 @@ def run(dataset, config):
         y_train = squeeze(y_train, axis=1)
 
     import numpy as np
-    # if len(np.unique(y_train)) < 3:
+    #if len(np.unique(y_train)) < 3:
+    #if x_train.shape[1]!=12:
     #    return None
-    # else:
+    #else:
     #    while True:
     #        print("!")
 
@@ -99,32 +102,36 @@ def run(dataset, config):
 
     metric_function = MetricsRepository().metric_by_id(metric)
 
-    # Create GP-based composer
-    composer = GPComposer()
+    if False:
+        with utils.Timer() as training:
+            # the choice and initialisation of the GP search
+            composer_requirements = GPComposerRequirements(
+                primary=available_model_types,
+                secondary=available_model_types, max_arity=3,
+                max_depth=3, max_lead_time=datetime.timedelta(minutes=runtime_min * 0.8))
 
-    with utils.Timer() as training:
-        # the choice and initialisation of the GP search
-        composer_requirements = GPComposerRequirements(
-            primary=available_model_types,
-            secondary=available_model_types, max_arity=3,
-            max_depth=3, pop_size=20, num_of_generations=1,
-            crossover_prob=0.8, mutation_prob=0.8, max_lead_time=datetime.timedelta(minutes=runtime_min))
+            # GP optimiser parameters choice
+            scheme_type = GeneticSchemeTypesEnum.parameter_free
+            optimiser_parameters = GPChainOptimiserParameters(genetic_scheme_type=scheme_type)
 
-        # GP optimiser parameters choice
-        scheme_type = GeneticSchemeTypesEnum.steady_state
-        optimiser_parameters = GPChainOptimiserParameters(genetic_scheme_type=scheme_type)
+            # Create builder for composer and set composer params
+            builder = GPComposerBuilder(task=task).with_requirements(composer_requirements).with_metrics(
+                metric_function).with_optimiser_parameters(optimiser_parameters)
 
-        # Create builder for composer and set composer params
-        builder = GPComposerBuilder(task=task).with_requirements(composer_requirements).with_metrics(
-            metric_function).with_optimiser_parameters(optimiser_parameters)
+            composer = builder.build()
 
-        composer = builder.build()
+            # the optimal chain generation by composition - the most time-consuming task
+            chain_evo_composed = composer.compose_chain(data=dataset_to_compose,
+                                                        is_visualise=False)
 
-        # the optimal chain generation by composition - the most time-consuming task
-        chain_evo_composed = composer.compose_chain(data=dataset_to_compose,
-                                                    is_visualise=False)
+    else:
+        with utils.Timer() as training:
+            if is_classification:
+                chain_evo_composed = Chain(PrimaryNode('logit'))
+            else:
+                chain_evo_composed = Chain(PrimaryNode('lasso'))
 
-        chain_evo_composed.fit(input_data=dataset_to_compose, verbose=False)
+    chain_evo_composed.fit(input_data=dataset_to_compose, verbose=False)
 
     log.info('Predicting on the test set.')
     y_test = dataset.test.y_enc

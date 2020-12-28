@@ -32,6 +32,8 @@ import re
 import sys
 from sklearn.utils import shuffle
 import numpy as np
+from fedot.core.chains.node import PrimaryNode
+from fedot.core.chains.chain import Chain
 
 def load_module(name, path):
     spec = importlib.util.spec_from_file_location(name, path)
@@ -87,7 +89,9 @@ data_keys = re.compile("^(X|y|data)(_.+)?$")
 def call_run(run_fn):
     import numpy as np
 
-    params = NS.from_dict({"dataset":{"train":{"X_enc":"/tmp/iris/train.X_enc.npy","y_enc":"/tmp/iris/train.y_enc.npy"},"test":{"X_enc":"/tmp/iris/test.X_enc.npy","y_enc":"/tmp/iris/test.y_enc.npy"}},"config":{"framework":"FEDOT","framework_params":{},"type":"classification","name":"Australian","fold":0,"metrics":["auc","logloss","acc"],"metric":"auc","seed":3029240368,"max_runtime_seconds":600,"cores":4,"max_mem_size_mb":91763,"min_vol_size_mb":-1,"input_dir":"/home/rosneft_user_2500/.openml/cache","output_dir":"/home/rosneft_user_2500/bench/automlbenchmark/results/fedot.small.test.local.20201225T163641","output_predictions_file":"/home/rosneft_user_2500/bench/automlbenchmark/results/fedot.small.test.local.20201225T163641/predictions/fedot.Australian.0.csv","result_token":"5e433616-46cf-11eb-a671-7957e32fc18d","result_dir":"/tmp/iris"}})
+    params = NS.from_dict({"dataset":{"train":{"X_enc":"/tmp/dress/train.X_enc.npy","y_enc":"/tmp/dress/train.y_enc.npy"},
+                                      "test":{"X_enc":"/tmp/dress/test.X_enc.npy","y_enc":"/tmp/dress/test.y_enc.npy"}},
+                           "config":{"framewor k":"FEDOT","framework_params":{},"type":"classification","name":"Australian","fold":0,"metrics":["auc","logloss","acc"],"metric":"auc","seed":3029240368,"max_runtime_seconds":600,"cores":4,"max_mem_size_mb":91763,"min_vol_size_mb":-1,"input_dir":"/home/rosneft_user_2500/.openml/cache","output_dir":"/home/rosneft_user_2500/bench/automlbenchmark/results/fedot.small.test.local.20201225T163641","output_predictions_file":"/home/rosneft_user_2500/bench/automlbenchmark/results/fedot.small.test.local.20201225T163641/predictions/fedot.Australian.0.csv","result_token":"5e433616-46cf-11eb-a671-7957e32fc18d","result_dir":"/tmp/iris"}})
 
     def load_data(name, path, **ignored):
         if isinstance(path, str) and data_keys.match(name):
@@ -191,27 +195,32 @@ def run(dataset, config):
     # Create GP-based composer
     composer = GPComposer()
 
-    #with utils.Timer() as training:
-    # the choice and initialisation of the GP search
-    composer_requirements = GPComposerRequirements(
-        primary=available_model_types,
-        secondary=available_model_types, max_arity=3,
-        max_depth=3, pop_size=3, num_of_generations=2,
-        crossover_prob=0.8, mutation_prob=0.8, max_lead_time=datetime.timedelta(minutes=runtime_min))
+    if False:
+        # the choice and initialisation of the GP search
+        composer_requirements = GPComposerRequirements(
+            primary=available_model_types,
+            secondary=available_model_types, max_arity=3,
+            max_depth=3, max_lead_time=datetime.timedelta(minutes=runtime_min * 0.8))
 
-    # GP optimiser parameters choice
-    scheme_type = GeneticSchemeTypesEnum.steady_state
-    optimiser_parameters = GPChainOptimiserParameters(genetic_scheme_type=scheme_type)
+        # GP optimiser parameters choice
+        scheme_type = GeneticSchemeTypesEnum.parameter_free
+        optimiser_parameters = GPChainOptimiserParameters(genetic_scheme_type=scheme_type)
 
-    # Create builder for composer and set composer params
-    builder = GPComposerBuilder(task=task).with_requirements(composer_requirements).with_metrics(
-        metric_function).with_optimiser_parameters(optimiser_parameters)
+        # Create builder for composer and set composer params
+        builder = GPComposerBuilder(task=task).with_requirements(composer_requirements).with_metrics(
+            metric_function).with_optimiser_parameters(optimiser_parameters)
 
-    composer = builder.build()
+        composer = builder.build()
 
-    # the optimal chain generation by composition - the most time-consuming task
-    chain_evo_composed = composer.compose_chain(data=dataset_to_compose,
-                                                is_visualise=False)
+        # the optimal chain generation by composition - the most time-consuming task
+        chain_evo_composed = composer.compose_chain(data=dataset_to_compose,
+                                                    is_visualise=False)
+
+    else:
+        if is_classification:
+            chain_evo_composed = Chain(PrimaryNode('logit'))
+        else:
+            chain_evo_composed = Chain(PrimaryNode('lasso'))
 
     chain_evo_composed.fit(input_data=dataset_to_compose, verbose=False)
 
@@ -230,7 +239,7 @@ def run(dataset, config):
                   probabilities=probabilities,
                   target_is_encoded=is_classification,
                   models_count=1,
-                  training_duration=training.duration)
+                  training_duration=1)
 
 
 def save_artifacts(estimator, config):

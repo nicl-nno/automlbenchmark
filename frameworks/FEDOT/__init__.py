@@ -12,14 +12,13 @@ def setup(*args, **kwargs):
 def run(dataset: Dataset, config: TaskConfig):
     from frameworks.shared.caller import run_in_venv
 
-    X_train_enc, X_test_enc = impute(dataset.train.X_enc, dataset.test.X_enc)
     data = dict(
         train=dict(
-            X_enc=X_train_enc,
+            X_enc=dataset.train.X_enc,
             y_enc=dataset.train.y_enc
         ),
         test=dict(
-            X_enc=X_test_enc,
+            X_enc=dataset.test.X_enc,
             y_enc=dataset.test.y_enc
         )
     )
@@ -29,7 +28,8 @@ def run(dataset: Dataset, config: TaskConfig):
             prob_format = results.probabilities.item()
             if prob_format == "predictions":
                 target_values_enc = dataset.target.label_encoder.transform(dataset.target.values)
-                results.probabilities = Encoder('one-hot', target=False, encoded_type=float).fit(target_values_enc).transform(results.predictions)
+                results.probabilities = Encoder('one-hot', target=False, encoded_type=float).fit(
+                    target_values_enc).transform(results.predictions)
             else:
                 raise ValueError(f"Unknown probabilities format: {prob_format}")
         return results
@@ -37,4 +37,3 @@ def run(dataset: Dataset, config: TaskConfig):
     return run_in_venv(__file__, "exec.py",
                        input_data=data, dataset=dataset, config=config,
                        process_results=process_results)
-
