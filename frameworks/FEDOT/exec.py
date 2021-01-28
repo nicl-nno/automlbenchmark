@@ -65,14 +65,6 @@ def run(dataset, config):
     if len(y_train.shape) > 1 and y_train.shape[1] == 1:
         y_train = squeeze(y_train, axis=1)
 
-    import numpy as np
-    #if len(np.unique(y_train)) < 3:
-    #if x_train.shape[1]!=12:
-    #    return None
-    #else:
-    #    while True:
-    #        print("!")
-
     x_test = dataset.test.X_enc
 
     training_params = {k: v for k, v in config.framework_params.items() if not k.startswith('_')}
@@ -102,13 +94,13 @@ def run(dataset, config):
 
     metric_function = MetricsRepository().metric_by_id(metric)
 
-    if False:
+    if True:
         with utils.Timer() as training:
             # the choice and initialisation of the GP search
             composer_requirements = GPComposerRequirements(
                 primary=available_model_types,
                 secondary=available_model_types, max_arity=3,
-                max_depth=3, max_lead_time=datetime.timedelta(minutes=runtime_min * 0.8))
+                max_depth=2, max_lead_time=datetime.timedelta(minutes=runtime_min * 0.8))
 
             # GP optimiser parameters choice
             scheme_type = GeneticSchemeTypesEnum.parameter_free
@@ -142,6 +134,9 @@ def run(dataset, config):
     else:
         probabilities = chain_evo_composed.predict(dataset_to_test, output_mode='full_probs').predict
 
+    save_artifacts(chain_evo_composed, config)
+
+
     return result(output_file=config.output_predictions_file,
                   predictions=predictions,
                   truth=y_test,
@@ -151,21 +146,12 @@ def run(dataset, config):
                   training_duration=training.duration)
 
 
-def save_artifacts(estimator, config):
+def save_artifacts(chain, config):
     try:
-        log.debug("All individuals :\n%s", list(estimator.evaluated_individuals_.items()))
-        models = estimator.pareto_front_fitted_pipelines_
-        hall_of_fame = list(zip(reversed(estimator._pareto_front.keys), estimator._pareto_front.items))
         artifacts = config.framework_params.get('_save_artifacts', False)
         if 'models' in artifacts:
-            models_file = os.path.join(output_subdir('models', config), 'models.txt')
-            with open(models_file, 'w') as f:
-                for m in hall_of_fame:
-                    pprint.pprint(dict(
-                        fitness=str(m[0]),
-                        model=str(m[1]),
-                        pipeline=models[str(m[1])],
-                    ), stream=f)
+            models_file = os.path.join(output_subdir('models', config), 'model.json')
+            chain.save_chain(models_file)
     except Exception:
         log.debug("Error when saving artifacts.", exc_info=True)
 
