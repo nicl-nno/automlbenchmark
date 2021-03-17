@@ -111,10 +111,10 @@ TPOT:
     _save_artifacts: ['models', 'leaderboard', 'logs']
 
 FEDOT:
-  version: '0.2.0'
+  version: '0.2.1'
   project: https://github.com/nccr-itmo/FEDOT
   params:
-    _save_artifacts: ['models', 'leaderboard', 'logs']
+    _save_artifacts: ['models']
 
 #  params:
 #    _save_artifacts: ['models']
