@@ -48,7 +48,8 @@ def run(dataset, config):
              config.max_runtime_seconds, n_jobs, scoring_metric)
     runtime_min = (config.max_runtime_seconds / 60)
 
-    fedot = Fedot(problem='classification', learning_time=runtime_min * 0.6)
+    fedot = Fedot(problem='classification', learning_time=runtime_min * 0.6,
+                  composer_params={'metric': scoring_metric})
 
     with utils.Timer() as training:
         # fit model without optimisation - single XGBoost node is used
@@ -61,7 +62,7 @@ def run(dataset, config):
     if not is_classification:
         probabilities = None
     else:
-        probabilities = fedot.predict_proba(features=dataset.test.X_enc)
+        probabilities = fedot.predict_proba(features=dataset.test.X_enc, probs_for_all_classes=True)
 
     save_artifacts({'model': model}, config)
 
