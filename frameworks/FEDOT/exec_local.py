@@ -36,7 +36,6 @@ def load_module(name, path):
     return module
 
 
-
 def setup_logger():
     console = logging.StreamHandler(sys.stdout)
     console.setLevel(logging.INFO)
@@ -74,17 +73,17 @@ data_keys = re.compile("^(X|y|data)(_.+)?$")
 def call_run(run_fn):
     import numpy as np
 
-    params = NS.from_dict({"dataset": {"train": {"X_enc": "/tmp/train.X_enc.npy", "y_enc": "/tmp/train.y_enc.npy"},
-                                       "test": {"X_enc": "/tmp/test.X_enc.npy", "y_enc": "/tmp/test.y_enc.npy"}},
+    params = NS.from_dict({"dataset": {"train": {"X_enc": "./train.X_enc.npy", "y_enc": "./train.y_enc.npy"},
+                                       "test": {"X_enc": "./test.X_enc.npy", "y_enc": "./test.y_enc.npy"}},
                            "config": {"framewor k": "FEDOT", "framework_params": {}, "type": "classification",
                                       "name": "Australian", "fold": 0, "metrics": ["auc", "logloss", "acc"],
-                                      "metric": "auc", "seed": 3029240368, "max_runtime_seconds": 600, "cores": 4,
+                                      "metric": "logloss", "seed": 3029240368, "max_runtime_seconds": 600, "cores": 4,
                                       "max_mem_size_mb": 91763, "min_vol_size_mb": -1,
                                       "input_dir": "/home/rosneft_user_2500/.openml/cache",
                                       "output_dir": "/home/rosneft_user_2500/bench/automlbenchmark/results/fedot.small.test.local.20201225T163641",
                                       "output_predictions_file": "/home/rosneft_user_2500/bench/automlbenchmark/results/fedot.small.test.local.20201225T163641/predictions/fedot.Australian.0.csv",
                                       "result_token": "5e433616-46cf-11eb-a671-7957e32fc18d",
-                                      "result_dir": "/tmp/iris"}})
+                                      "result_dir": "."}})
 
     def load_data(name, path, **ignored):
         if isinstance(path, str) and data_keys.match(name):
@@ -125,15 +124,15 @@ def run(dataset, config):
     is_classification = config.type == 'classification'
     # Mapping of benchmark metrics to FEDOT metrics
     metrics_mapping = dict(
-        acc='accuracy',
+        acc='acc',
         auc='roc_auc',
         f1='f1',
-        logloss='neg_log_loss',
-        mae='neg_mean_absolute_error',
-        mse='neg_mean_squared_error',
-        msle='neg_mean_squared_log_error',
+        logloss='logloss',
+        mae='mae',
+        mse='mse',
+        msle='msle',
         r2='r2',
-        rmse='neg_mean_squared_error'
+        rmse='rmse'
     )
     scoring_metric = metrics_mapping[config.metric] if config.metric in metrics_mapping else None
 
@@ -147,27 +146,32 @@ def run(dataset, config):
 
     log.info('Running FEDOT with a maximum time of %ss on %s cores, optimizing %s.',
              config.max_runtime_seconds, n_jobs, scoring_metric)
-    runtime_min = (config.max_runtime_seconds / 60)
+    runtime_min = (config.max_runtime_seconds * 0.8 / 60)
 
-    fedot = Fedot(problem='classification', learning_time=runtime_min * 0.6)
+    import random
+    dataset.train.y_enc = np.asarray([random.choice([0, 1, 2]) for _ in dataset.train.y_enc])
 
+    dataset.test.y_enc = np.asarray([random.choice([0, 1, 2]) for _ in dataset.test.y_enc])
+
+    fedot = Fedot(problem=config.type, learning_time=runtime_min,
+                  composer_params={'metric': scoring_metric}, **training_params)
     y_train = dataset.train.y_enc
-    #if len(y_train.shape) > 1 and y_train.shape[1] == 1:
+    # if len(y_train.shape) > 1 and y_train.shape[1] == 1:
     #    y_train = np.squeeze(y_train, axis=1)
 
-
-    #with utils.Timer() as training:
+    # with utils.Timer() as training:
     # fit model without optimisation - single XGBoost node is used
-    model = fedot.fit(features=dataset.train.X_enc, target=y_train ,
-                      predefined_model='xgboost')
+    model = fedot.fit(features=dataset.train.X_enc, target=dataset.train.y_enc)
 
     log.info('Predicting on the test set.')
     predictions = fedot.predict(features=dataset.test.X_enc)
 
+    if config.type == 'classification':
+        predictions = fedot.prediction_labels.predict
     if not is_classification:
         probabilities = None
     else:
-        probabilities = fedot.predict_proba(features=dataset.test.X_enc)
+        probabilities = fedot.predict_proba(features=dataset.test.X_enc, probs_for_all_classes=True)
 
     save_artifacts({'model': model}, config)
 

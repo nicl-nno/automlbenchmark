@@ -4,7 +4,7 @@ echo "Start FEDOT benchmarking"
 ./frameworks/FEDOT/setup.sh
 
 ## Run benchmarks ##
-python3 runbenchmark.py FEDOT test
+python3 runbenchmark.py FEDOT small
 
 ## Get result ##
 cd results

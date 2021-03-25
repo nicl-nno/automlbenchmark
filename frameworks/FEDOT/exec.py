@@ -24,20 +24,20 @@ def run(dataset, config):
     is_classification = config.type == 'classification'
     # Mapping of benchmark metrics to FEDOT metrics
     metrics_mapping = dict(
-        acc='accuracy',
+        acc='acc',
         auc='roc_auc',
         f1='f1',
-        logloss='neg_log_loss',
-        mae='neg_mean_absolute_error',
-        mse='neg_mean_squared_error',
-        msle='neg_mean_squared_log_error',
+        logloss='logloss',
+        mae='mae',
+        mse='mse',
+        msle='msle',
         r2='r2',
-        rmse='neg_mean_squared_error'
+        rmse='rmse'
     )
     scoring_metric = metrics_mapping[config.metric] if config.metric in metrics_mapping else None
 
     if scoring_metric is None:
-        raise ValueError("Performance metric {} not supported.".format(config.metric))
+        raise ValueError(f'Performance metric {config.metric} not supported.')
 
     training_params = {k: v for k, v in config.framework_params.items() if not k.startswith('_')}
 
@@ -48,16 +48,20 @@ def run(dataset, config):
              config.max_runtime_seconds, n_jobs, scoring_metric)
     runtime_min = (config.max_runtime_seconds / 60)
 
-    fedot = Fedot(problem='classification', learning_time=runtime_min * 0.6,
-                  composer_params={'metric': scoring_metric})
+    fedot = Fedot(problem=config.type, learning_time=runtime_min,
+                  composer_params={'metric': scoring_metric}, **training_params)
 
     with utils.Timer() as training:
-        # fit model without optimisation - single XGBoost node is used
-        model = fedot.fit(features=dataset.train.X_enc, target=dataset.train.y_enc,
-                          predefined_model='xgboost')
+        model = fedot.fit(features=dataset.train.X_enc, target=dataset.train.y_enc)
+        #if config.type == 'classification':
+        #    model = fedot.fit(features=dataset.train.X_enc, target=dataset.train.y_enc, predefined_model='logit')
+        #else:
+        #    model = fedot.fit(features=dataset.train.X_enc, target=dataset.train.y_enc, predefined_model='linear')
 
     log.info('Predicting on the test set.')
     predictions = fedot.predict(features=dataset.test.X_enc)
+    if config.type == 'classification':
+        predictions = fedot.prediction_labels.predict
 
     if not is_classification:
         probabilities = None
