@@ -36,6 +36,10 @@ def run(dataset, config):
     )
     scoring_metric = metrics_mapping[config.metric] if config.metric in metrics_mapping else None
 
+    #if config.metric == 'rmse':
+    #    while(True):
+    #        print("!")
+
     if scoring_metric is None:
         raise ValueError(f'Performance metric {config.metric} not supported.')
 
@@ -46,10 +50,10 @@ def run(dataset, config):
 
     log.info('Running FEDOT with a maximum time of %ss on %s cores, optimizing %s.',
              config.max_runtime_seconds, n_jobs, scoring_metric)
-    runtime_min = (config.max_runtime_seconds / 60)
+    runtime_min = (config.max_runtime_seconds * 0.8 / 60)
 
     fedot = Fedot(problem=config.type, learning_time=runtime_min,
-                  composer_params={'metric': scoring_metric}, **training_params)
+                  composer_params={'metric': scoring_metric}, **training_params, verbose_level=2)
 
     with utils.Timer() as training:
         model = fedot.fit(features=dataset.train.X_enc, target=dataset.train.y_enc)

@@ -75,9 +75,9 @@ def call_run(run_fn):
 
     params = NS.from_dict({"dataset": {"train": {"X_enc": "./train.X_enc.npy", "y_enc": "./train.y_enc.npy"},
                                        "test": {"X_enc": "./test.X_enc.npy", "y_enc": "./test.y_enc.npy"}},
-                           "config": {"framewor k": "FEDOT", "framework_params": {}, "type": "classification",
-                                      "name": "Australian", "fold": 0, "metrics": ["auc", "logloss", "acc"],
-                                      "metric": "logloss", "seed": 3029240368, "max_runtime_seconds": 600, "cores": 4,
+                           "config": {"framewor k": "FEDOT", "framework_params": {}, "type": "regression",
+                                      "name": "choleterol", "fold": 0, "metrics": ["auc", "logloss", "acc"],
+                                      "metric": "rmse", "seed": 3029240368, "max_runtime_seconds": 600, "cores": 4,
                                       "max_mem_size_mb": 91763, "min_vol_size_mb": -1,
                                       "input_dir": "/home/rosneft_user_2500/.openml/cache",
                                       "output_dir": "/home/rosneft_user_2500/bench/automlbenchmark/results/fedot.small.test.local.20201225T163641",
@@ -149,12 +149,13 @@ def run(dataset, config):
     runtime_min = (config.max_runtime_seconds * 0.8 / 60)
 
     import random
-    dataset.train.y_enc = np.asarray([random.choice([0, 1, 2]) for _ in dataset.train.y_enc])
+    #dataset.train.y_enc = np.asarray([random.choice([0, 1, 2]) for _ in dataset.train.y_enc])
 
-    dataset.test.y_enc = np.asarray([random.choice([0, 1, 2]) for _ in dataset.test.y_enc])
+    #dataset.test.y_enc = np.asarray([random.choice([0, 1, 2]) for _ in dataset.test.y_enc])
 
     fedot = Fedot(problem=config.type, learning_time=runtime_min,
-                  composer_params={'metric': scoring_metric}, **training_params)
+                  composer_params={'metric': scoring_metric}, **training_params,
+                  verbose_level=4)
     y_train = dataset.train.y_enc
     # if len(y_train.shape) > 1 and y_train.shape[1] == 1:
     #    y_train = np.squeeze(y_train, axis=1)

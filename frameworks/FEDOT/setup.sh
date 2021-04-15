@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 HERE=$(dirname "$0")
 AMLB_DIR="$1"
-VERSION=${2:-"moo-tmp"}
+VERSION=${2:-"fix/mo-and-regr-2"}
 REPO=${3:-"https://github.com/nccr-itmo/FEDOT.git"}
 PKG=${4:-"fedot"}
 if [[ "$VERSION" == "latest" ]]; then
